@@ -11,12 +11,27 @@ st.set_page_config(
 )
 
 # -------------------------
-# Hide "Press Enter to submit form"
+# Hide "Press Enter to submit form" (tooltip + helper text)
 # -------------------------
 st.markdown("""
 <style>
-/* Hide Streamlit's "Press Enter to submit form" helper text inside forms */
+/* 1) Hide Streamlit's form helper text (small text under widgets in forms) */
 div[data-testid="stForm"] small {
+    display: none !important;
+}
+
+/* 2) Hide tooltip overlays (this is the popup you are seeing) */
+div[role="tooltip"] {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+}
+
+/* 3) Extra safety for newer Streamlit builds (some tooltips use these) */
+[data-testid="stTooltipContent"] {
+    display: none !important;
+}
+[data-testid="stWidgetTooltip"] {
     display: none !important;
 }
 </style>
