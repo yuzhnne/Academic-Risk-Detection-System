@@ -1,5 +1,6 @@
 import streamlit as st
 import joblib
+from pathlib import Path
 
 # -------------------------
 # Page Config
@@ -15,35 +16,39 @@ st.set_page_config(
 # -------------------------
 st.markdown("""
 <style>
-/* 1) Hide Streamlit's form helper text (small text under widgets in forms) */
-div[data-testid="stForm"] small {
-    display: none !important;
-}
+/* Hide Streamlit's form helper text (small text under widgets in forms) */
+div[data-testid="stForm"] small { display: none !important; }
 
-/* 2) Hide tooltip overlays (this is the popup you are seeing) */
-div[role="tooltip"] {
-    display: none !important;
-    visibility: hidden !important;
-    opacity: 0 !important;
-}
+/* Hide tooltip overlays (the popup you see) */
+div[role="tooltip"] { display: none !important; visibility: hidden !important; opacity: 0 !important; }
 
-/* 3) Extra safety for newer Streamlit builds (some tooltips use these) */
-[data-testid="stTooltipContent"] {
-    display: none !important;
-}
-[data-testid="stWidgetTooltip"] {
-    display: none !important;
-}
+/* Extra safety for newer Streamlit builds */
+[data-testid="stTooltipContent"] { display: none !important; }
+[data-testid="stWidgetTooltip"] { display: none !important; }
 </style>
 """, unsafe_allow_html=True)
+
+# -------------------------
+# Resolve artifact paths (YOUR structure: student/artifacts/*.joblib)
+# -------------------------
+APP_DIR = Path(__file__).resolve().parent          # .../student
+ARTIFACTS_DIR = APP_DIR / "artifacts"              # .../student/artifacts
+
+MODEL_PATH = ARTIFACTS_DIR / "model.joblib"
+DEFAULT_ROW_PATH = ARTIFACTS_DIR / "default_row.joblib"
 
 # -------------------------
 # Load model + default row
 # -------------------------
 @st.cache_resource
 def load_artifacts():
-    model_ = joblib.load("artifacts/model.joblib")
-    default_row_ = joblib.load("artifacts/default_row.joblib")  # schema row
+    if not MODEL_PATH.exists():
+        raise FileNotFoundError(f"Model file not found: {MODEL_PATH}")
+    if not DEFAULT_ROW_PATH.exists():
+        raise FileNotFoundError(f"Default row file not found: {DEFAULT_ROW_PATH}")
+
+    model_ = joblib.load(MODEL_PATH)
+    default_row_ = joblib.load(DEFAULT_ROW_PATH)  # schema row
     return model_, default_row_
 
 model, default_row = load_artifacts()
