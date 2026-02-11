@@ -1,78 +1,274 @@
 import streamlit as st
-import pandas as pd
 import joblib
 
-st.set_page_config(page_title="Student At-Risk Detector", layout="centered")
+# -------------------------
+# Page Config
+# -------------------------
+st.set_page_config(
+    page_title="Early Student At-Risk Detection",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
-st.title("🎓 Early Student At-Risk Detection")
-st.write("Fill in the student details below. The model will predict if the student is **at risk of failing**.")
+# -------------------------
+# Hide "Press Enter to submit form"
+# -------------------------
+st.markdown("""
+<style>
+/* Hide Streamlit's "Press Enter to submit form" helper text inside forms */
+div[data-testid="stForm"] small {
+    display: none !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
-# Load saved model + default row
-model = joblib.load("artifacts/model.joblib")
-default_row = joblib.load("artifacts/default_row.joblib")  # a 1-row DataFrame
+# -------------------------
+# Load model + default row
+# -------------------------
+@st.cache_resource
+def load_artifacts():
+    model_ = joblib.load("artifacts/model.joblib")
+    default_row_ = joblib.load("artifacts/default_row.joblib")  # schema row
+    return model_, default_row_
 
-# --- Form UI ---
-with st.form("student_form"):
-    st.subheader("Student Information")
+model, default_row = load_artifacts()
 
-    age = st.number_input("Age", min_value=10, max_value=25, value=17)
+# -------------------------
+# Helpers
+# -------------------------
+def set_if_exists(row, col, value):
+    if col in row.columns:
+        row.loc[row.index[0], col] = value
 
-    subject = st.selectbox("Subject", ["Math", "Portuguese"])
+def risk_band(p):
+    if p is None:
+        return "Unknown"
+    if p >= 0.70:
+        return "High Risk"
+    if p >= 0.40:
+        return "Moderate Risk"
+    return "Low Risk"
 
-    failures = st.selectbox("Past failures", [0, 1, 2, 3])
-    absences = st.number_input("Absences", min_value=0, max_value=100, value=0)
+# -------------------------
+# Sidebar Navigation
+# -------------------------
+st.sidebar.title("Early Student At-Risk Detection")
+page = st.sidebar.radio(
+    "Navigation",
+    ["Prediction", "How It Works", "About"],
+    index=0
+)
 
-    studytime = st.selectbox("Weekly study time (1=low, 4=high)", [1, 2, 3, 4])
+st.sidebar.markdown(
+    """
+    **Usage Steps**
+    - Enter student details
+    - Submit for prediction
+    - Review probability and recommendation
+    """
+)
 
-    schoolsup = st.selectbox("Extra school support?", ["yes", "no"])
-    famsup = st.selectbox("Family educational support?", ["yes", "no"])
+# -------------------------
+# Pages
+# -------------------------
+if page == "Prediction":
+    st.title("Early Student At-Risk Detection")
+    st.caption(
+        "This application predicts whether a student is at risk of failing, "
+        "allowing educators to provide early intervention."
+    )
 
-    internet = st.selectbox("Internet access at home?", ["yes", "no"])
-    higher = st.selectbox("Wants higher education?", ["yes", "no"])
+    st.divider()
 
-    # Use your earlier grades (these are allowed because we dropped G3, not G1/G2)
-    g1 = st.number_input("Grade 1 (G1)", min_value=0, max_value=20, value=10)
-    g2 = st.number_input("Grade 2 (G2)", min_value=0, max_value=20, value=10)
+    left, right = st.columns([1.05, 0.95], gap="large")
 
-    submitted = st.form_submit_button("Predict Risk")
+    # -------------------------
+    # Student Form
+    # -------------------------
+    with left:
+        st.subheader("Student Information")
 
-# --- Prediction ---
-if submitted:
-    # Start from default row so all required columns exist
-    row = default_row.copy()
+        with st.form("student_form", border=True):
+            col1, col2, col3 = st.columns(3)
 
-    # Update only the fields we collected
-    if "age" in row.columns: row.loc[row.index[0], "age"] = age
-    if "subject" in row.columns: row.loc[row.index[0], "subject"] = subject
-    if "failures" in row.columns: row.loc[row.index[0], "failures"] = failures
-    if "absences" in row.columns: row.loc[row.index[0], "absences"] = absences
-    if "studytime" in row.columns: row.loc[row.index[0], "studytime"] = studytime
+            with col1:
+                age = st.number_input(
+                    "Age",
+                    min_value=10,
+                    max_value=25,
+                    value=None,
+                    placeholder="Enter age",
+                )
+                subject = st.selectbox(
+                    "Subject",
+                    ["Math", "Portuguese"],
+                    index=None,
+                    placeholder="Select subject",
+                )
 
-    if "schoolsup" in row.columns: row.loc[row.index[0], "schoolsup"] = schoolsup
-    if "famsup" in row.columns: row.loc[row.index[0], "famsup"] = famsup
-    if "internet" in row.columns: row.loc[row.index[0], "internet"] = internet
-    if "higher" in row.columns: row.loc[row.index[0], "higher"] = higher
+            with col2:
+                failures = st.selectbox(
+                    "Past Failures",
+                    [0, 1, 2, 3],
+                    index=None,
+                    placeholder="Select number of failures",
+                )
+                absences = st.number_input(
+                    "Absences",
+                    min_value=0,
+                    max_value=100,
+                    value=None,
+                    placeholder="Enter absences",
+                )
 
-    if "G1" in row.columns: row.loc[row.index[0], "G1"] = g1
-    if "G2" in row.columns: row.loc[row.index[0], "G2"] = g2
+            with col3:
+                studytime = st.selectbox(
+                    "Weekly Study Time (1=Low, 4=High)",
+                    [1, 2, 3, 4],
+                    index=None,
+                    placeholder="Select study time",
+                )
 
-    # Predict
-    pred = model.predict(row)[0]
-    proba = None
-    if hasattr(model, "predict_proba"):
-        proba = model.predict_proba(row)[0][1]
+            st.markdown("Support and Environment")
+            col4, col5, col6, col7 = st.columns(4)
 
-    # Display results nicely
-    if pred == 1:
-        st.error("⚠️ Prediction: AT RISK")
-        st.write("Recommendation: Provide early intervention (consultation, extra lessons, counselling).")
-    else:
-        st.success("✅ Prediction: NOT AT RISK")
-        st.write("Recommendation: Continue monitoring and provide normal support.")
+            with col4:
+                schoolsup = st.selectbox(
+                    "Extra School Support",
+                    ["yes", "no"],
+                    index=None,
+                    placeholder="Select",
+                )
+            with col5:
+                famsup = st.selectbox(
+                    "Family Educational Support",
+                    ["yes", "no"],
+                    index=None,
+                    placeholder="Select",
+                )
+            with col6:
+                internet = st.selectbox(
+                    "Internet Access at Home",
+                    ["yes", "no"],
+                    index=None,
+                    placeholder="Select",
+                )
+            with col7:
+                higher = st.selectbox(
+                    "Plans for Higher Education",
+                    ["yes", "no"],
+                    index=None,
+                    placeholder="Select",
+                )
 
-    if proba is not None:
-        st.write(f"Confidence (probability of at-risk): **{proba:.2f}**")
+            st.markdown("Academic Performance (Earlier Terms)")
+            st.caption(
+                "G1 and G2 are earlier-term grades used for early risk detection. "
+                "Final grade G3 is not used as an input."
+            )
 
-    # Optional: show the final row used
-    with st.expander("See the full input sent to the model"):
-        st.dataframe(row)
+            col8, col9 = st.columns(2)
+            with col8:
+                g1 = st.number_input(
+                    "Grade 1 (G1)",
+                    min_value=0,
+                    max_value=20,
+                    value=None,
+                    placeholder="Enter G1 (0–20)",
+                )
+            with col9:
+                g2 = st.number_input(
+                    "Grade 2 (G2)",
+                    min_value=0,
+                    max_value=20,
+                    value=None,
+                    placeholder="Enter G2 (0–20)",
+                )
+
+            submitted = st.form_submit_button("Predict Risk", use_container_width=True)
+
+    # -------------------------
+    # Prediction Output
+    # -------------------------
+    with right:
+        st.subheader("Prediction Output")
+
+        if not submitted:
+            st.info("Submit the form to view the prediction.")
+        else:
+            required_fields = [
+                age, subject, failures, absences, studytime,
+                schoolsup, famsup, internet, higher, g1, g2
+            ]
+
+            if any(v is None for v in required_fields):
+                st.warning("Please fill in all fields before predicting.")
+                st.stop()
+
+            with st.spinner("Generating prediction..."):
+                row = default_row.copy()
+
+                set_if_exists(row, "age", age)
+                set_if_exists(row, "subject", subject)
+                set_if_exists(row, "failures", failures)
+                set_if_exists(row, "absences", absences)
+                set_if_exists(row, "studytime", studytime)
+                set_if_exists(row, "schoolsup", schoolsup)
+                set_if_exists(row, "famsup", famsup)
+                set_if_exists(row, "internet", internet)
+                set_if_exists(row, "higher", higher)
+                set_if_exists(row, "G1", g1)
+                set_if_exists(row, "G2", g2)
+
+                pred = model.predict(row)[0]
+                proba = (
+                    float(model.predict_proba(row)[0][1])
+                    if hasattr(model, "predict_proba")
+                    else None
+                )
+
+            if pred == 1:
+                st.error("Prediction Result: At Risk")
+            else:
+                st.success("Prediction Result: Not At Risk")
+
+            if proba is not None:
+                st.metric("Probability of Being At Risk", f"{proba:.2%}")
+                st.progress(min(max(proba, 0.0), 1.0))
+                st.write(f"Risk Level: {risk_band(proba)}")
+
+            st.markdown("Recommended Action")
+            if pred == 1:
+                st.write(
+                    "- Provide early academic support\n"
+                    "- Monitor attendance and engagement\n"
+                    "- Consider counselling or remedial assistance"
+                )
+            else:
+                st.write(
+                    "- Continue normal academic monitoring\n"
+                    "- Encourage consistent study habits"
+                )
+
+            with st.expander("View Full Model Input"):
+                st.dataframe(row, use_container_width=True)
+
+elif page == "How It Works":
+    st.title("How It Works")
+    st.write(
+        "The application collects student information, formats it into the required "
+        "feature set, and applies a trained machine learning model to estimate the "
+        "likelihood of academic risk."
+    )
+    st.write(
+        "Final grade (G3) is excluded to avoid data leakage. Earlier-term grades (G1, G2) "
+        "are used as they are available before final outcomes."
+    )
+
+elif page == "About":
+    st.title("About This Application")
+    st.write(
+        "This application demonstrates an early student at-risk detection system "
+        "designed for educational support staff. It serves as a decision-support tool "
+        "and should be used alongside professional judgement."
+    )
